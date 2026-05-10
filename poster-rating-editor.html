@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>영화 포스터 평점 제작 도구</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .header p {
+            color: #666;
+        }
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        .controls {
+            padding: 20px;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+        .canvas-container {
+            position: relative;
+            background: #000;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        .star-input {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .star-input select {
+            width: 80px;
+        }
+        .rating-preview {
+            display: flex;
+            gap: 2px;
+        }
+        .star {
+            width: 16px;
+            height: 16px;
+            fill: #ffd700;
+        }
+        .star.empty {
+            fill: #ddd;
+        }
+        .star.half {
+            fill: url(#half-star-preview);
+        }
+        .poster-canvas {
+            position: relative;
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+        .rating-overlay {
+            position: absolute;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            backdrop-filter: blur(10px);
+        }
+        .rating-category {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .rating-category:last-child {
+            margin-bottom: 0;
+        }
+        .category-name {
+            font-weight: 500;
+            opacity: 0.9;
+        }
+        .category-stars {
+            display: flex;
+            gap: 1px;
+        }
+        .overlay-star {
+            width: 12px;
+            height: 12px;
+            fill: #ffd700;
+        }
+        .overlay-star.empty {
+            fill: rgba(255, 255, 255, 0.3);
+        }
+        .overlay-star.half {
+            fill: url(#half-star);
+        }
+        .download-btn {
+            background: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            margin-top: 20px;
+            width: 100%;
+        }
+        .download-btn:hover {
+            background: #0056b3;
+        }
+        .upload-area {
+            border: 2px dashed #007bff;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            background: #f8f9ff;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .upload-area:hover {
+            background: #f0f4ff;
+        }
+        .upload-area.dragover {
+            background: #e3f2fd;
+            border-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        // 기본 시카리오 포스터 이미지
+        const defaultPosterImage = "data:image/jpeg;base64,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"
+
+        const MoviePosterEditor = () => {
+            const [posterImage, setPosterImage] = useState(defaultPosterImage);
+            const [ratings, setRatings] = useState({
+                "서사와 각본": 3.0,
+                "캐릭터와 연기": 3.0,
+                "시청각 미학": 4.0,
+                "연출과 완성도": 3.0,
+                "의미와 여운": 3.0
+            });
+            const [overlayPosition, setOverlayPosition] = useState({ x: 20, y: 350 });
+            const [overlayStyle, setOverlayStyle] = useState('dark');
+            const [overlayOpacity, setOverlayOpacity] = useState(0.85);
+            const canvasRef = useRef(null);
+
+            const handleFileUpload = (file) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    setPosterImage(e.target.result);
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileUpload(files[0]);
+                }
+            };
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+            };
+
+            const updateRating = (category, value) => {
+                setRatings(prev => ({
+                    ...prev,
+                    [category]: parseFloat(value)
+                }));
+            };
+
+            const generateStars = (rating) => {
+                return (
+                    <>
+                        <svg width="0" height="0">
+                            <defs>
+                                <linearGradient id="half-star">
+                                    <stop offset="50%" stopColor="#ffd700" />
+                                    <stop offset="50%" stopColor="rgba(255, 255, 255, 0.3)" />
+                                </linearGradient>
+                                <linearGradient id="half-star-preview">
+                                    <stop offset="50%" stopColor="#ffd700" />
+                                    <stop offset="50%" stopColor="#ddd" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                        {Array.from({ length: 5 }, (_, i) => {
+                            const starValue = i + 1;
+                            let starClass = 'star';
+                            
+                            if (rating >= starValue) {
+                                starClass += ''; // 완전한 별
+                            } else if (rating >= starValue - 0.5) {
+                                starClass += ' half'; // 반별
+                            } else {
+                                starClass += ' empty'; // 빈별
+                            }
+                            
+                            return (
+                                <svg key={i} className={starClass} viewBox="0 0 24 24">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                </svg>
+                            );
+                        })}
+                    </>
+                );
+            };
+
+            const downloadPoster = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // 포스터 이미지 그리기
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // 오버레이 배경 그리기
+                    const overlayWidth = 280;
+                    const overlayHeight = 140;
+                    ctx.fillStyle = `rgba(0, 0, 0, ${overlayOpacity})`;
+                    ctx.fillRect(overlayPosition.x, overlayPosition.y, overlayWidth, overlayHeight);
+                    
+                    // 텍스트 그리기
+                    ctx.fillStyle = 'white';
+                    ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
+                    
+                    let yOffset = overlayPosition.y + 25;
+                    Object.entries(ratings).forEach(([category, rating]) => {
+                        const fullStars = Math.floor(rating);
+                        const hasHalfStar = rating % 1 !== 0;
+                        const emptyStars = 5 - Math.ceil(rating);
+                        
+                        let starText = '★'.repeat(fullStars);
+                        if (hasHalfStar) starText += '☆'; // 반별은 속이 빈 별로 표시
+                        starText += '☆'.repeat(emptyStars);
+                        
+                        ctx.fillText(`${category}: ${starText}`, 
+                                   overlayPosition.x + 15, yOffset);
+                        yOffset += 22;
+                    });
+                    
+                    // 다운로드
+                    const link = document.createElement('a');
+                    link.download = '영화포스터_평점.png';
+                    link.href = canvas.toDataURL();
+                    link.click();
+                };
+                
+                img.src = posterImage;
+            };
+
+            return (
+                <div className="container">
+                    <div className="header">
+                        <h1>🎬 영화 포스터 평점 제작 도구</h1>
+                        <p>포스터 이미지를 업로드하고 평점을 설정하여 나만의 리뷰 포스터를 만들어보세요</p>
+                    </div>
+
+                    <div className="main-grid">
+                        <div className="controls">
+                            <div className="form-group">
+                                <label>포스터 이미지 업로드</label>
+                                <div 
+                                    className="upload-area"
+                                    onDrop={handleDrop}
+                                    onDragOver={handleDragOver}
+                                    onClick={() => document.getElementById('fileInput').click()}
+                                >
+                                    <p>클릭하거나 이미지를 드래그하여 업로드</p>
+                                    <small>JPG, PNG 파일 지원</small>
+                                </div>
+                                <input
+                                    id="fileInput"
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => e.target.files[0] && handleFileUpload(e.target.files[0])}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>평점 설정</label>
+                                {Object.entries(ratings).map(([category, rating]) => (
+                                    <div key={category} className="star-input">
+                                        <span style={{ minWidth: '130px', fontSize: '13px' }}>{category}</span>
+                                        <select
+                                            value={rating}
+                                            onChange={(e) => updateRating(category, e.target.value)}
+                                            style={{ 
+                                                flex: 1, 
+                                                padding: '6px 8px',
+                                                border: '1px solid #ddd',
+                                                borderRadius: '4px',
+                                                fontSize: '14px',
+                                                background: 'white'
+                                            }}
+                                        >
+                                            <option value={0.5}>0.5점</option>
+                                            <option value={1.0}>1.0점</option>
+                                            <option value={1.5}>1.5점</option>
+                                            <option value={2.0}>2.0점</option>
+                                            <option value={2.5}>2.5점</option>
+                                            <option value={3.0}>3.0점</option>
+                                            <option value={3.5}>3.5점</option>
+                                            <option value={4.0}>4.0점</option>
+                                            <option value={4.5}>4.5점</option>
+                                            <option value={5.0}>5.0점</option>
+                                        </select>
+                                        <div className="rating-preview" style={{ minWidth: '100px', justifyContent: 'flex-end' }}>
+                                            {generateStars(rating)}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="form-group">
+                                <label>오버레이 위치</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                    <div>
+                                        <label style={{ fontSize: '12px' }}>X 좌표</label>
+                                        <input
+                                            type="range"
+                                            min="10"
+                                            max="400"
+                                            value={overlayPosition.x}
+                                            onChange={(e) => setOverlayPosition(prev => ({ ...prev, x: parseInt(e.target.value) }))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '12px' }}>Y 좌표</label>
+                                        <input
+                                            type="range"
+                                            min="10"
+                                            max="500"
+                                            value={overlayPosition.y}
+                                            onChange={(e) => setOverlayPosition(prev => ({ ...prev, y: parseInt(e.target.value) }))}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label>투명도 조절</label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{ fontSize: '12px', minWidth: '30px' }}>투명</span>
+                                    <input
+                                        type="range"
+                                        min="0.1"
+                                        max="1.0"
+                                        step="0.1"
+                                        value={overlayOpacity}
+                                        onChange={(e) => setOverlayOpacity(parseFloat(e.target.value))}
+                                        style={{ flex: 1 }}
+                                    />
+                                    <span style={{ fontSize: '12px', minWidth: '30px' }}>불투명</span>
+                                    <span style={{ fontSize: '12px', minWidth: '40px', textAlign: 'center', fontWeight: '500' }}>
+                                        {Math.round(overlayOpacity * 100)}%
+                                    </span>
+                                </div>
+                            </div>
+
+                            <button className="download-btn" onClick={downloadPoster}>
+                                💾 평점 포스터 다운로드
+                            </button>
+                        </div>
+
+                        <div className="canvas-container">
+                            <div style={{ position: 'relative', maxWidth: '100%' }}>
+                                <img
+                                    src={posterImage}
+                                    alt="영화 포스터"
+                                    className="poster-canvas"
+                                    style={{ maxHeight: '600px', width: 'auto' }}
+                                />
+                                <div
+                                    className="rating-overlay"
+                                    style={{
+                                        left: `${overlayPosition.x}px`,
+                                        top: `${overlayPosition.y}px`,
+                                        cursor: 'move',
+                                        background: `rgba(0, 0, 0, ${overlayOpacity})`
+                                    }}
+                                    onMouseDown={(e) => {
+                                        const startX = e.clientX - overlayPosition.x;
+                                        const startY = e.clientY - overlayPosition.y;
+                                        
+                                        const handleMouseMove = (e) => {
+                                            setOverlayPosition({
+                                                x: Math.max(0, e.clientX - startX),
+                                                y: Math.max(0, e.clientY - startY)
+                                            });
+                                        };
+                                        
+                                        const handleMouseUp = () => {
+                                            document.removeEventListener('mousemove', handleMouseMove);
+                                            document.removeEventListener('mouseup', handleMouseUp);
+                                        };
+                                        
+                                        document.addEventListener('mousemove', handleMouseMove);
+                                        document.addEventListener('mouseup', handleMouseUp);
+                                    }}
+                                >
+                                    {Object.entries(ratings).map(([category, rating]) => (
+                                        <div key={category} className="rating-category">
+                                            <span className="category-name">{category}</span>
+                                            <div className="category-stars">
+                                                {Array.from({ length: 5 }, (_, i) => {
+                                                    const starValue = i + 1;
+                                                    let starClass = 'overlay-star';
+                                                    
+                                                    if (rating >= starValue) {
+                                                        starClass += ''; // 완전한 별
+                                                    } else if (rating >= starValue - 0.5) {
+                                                        starClass += ' half'; // 반별
+                                                    } else {
+                                                        starClass += ' empty'; // 빈별
+                                                    }
+                                                    
+                                                    return (
+                                                        <svg key={i} className={starClass} viewBox="0 0 24 24">
+                                                            <defs>
+                                                                <linearGradient id="half-star">
+                                                                    <stop offset="50%" stopColor="#ffd700" />
+                                                                    <stop offset="50%" stopColor="rgba(255, 255, 255, 0.3)" />
+                                                                </linearGradient>
+                                                            </defs>
+                                                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                                                        </svg>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<MoviePosterEditor />, document.getElementById('root'));
+    </script>
+</body>
+</html>
