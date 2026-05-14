@@ -269,45 +269,86 @@
                 img.onload = () => {
                     canvas.width = img.width;
                     canvas.height = img.height;
-
-                    // 포스터 이미지 그리기
                     ctx.drawImage(img, 0, 0);
 
-                    // 미리보기 이미지의 실제 표시 크기와 원본 크기 비율 계산
+                    // 미리보기 이미지 크기 → 원본 비율
                     const displayedImg = displayedImgRef.current;
                     const scaleX = img.width / displayedImg.offsetWidth;
                     const scaleY = img.height / displayedImg.offsetHeight;
 
-                    // 스케일 적용한 오버레이 위치/크기
                     const scaledX = overlayPosition.x * scaleX;
                     const scaledY = overlayPosition.y * scaleY;
-                    const overlayWidth = 280 * scaleX;
-                    const overlayHeight = 140 * scaleY;
 
-                    // 오버레이 배경 그리기
-                    ctx.fillStyle = `rgba(0, 0, 0, ${overlayOpacity})`;
-                    ctx.fillRect(scaledX, scaledY, overlayWidth, overlayHeight);
+                    const fontSize  = Math.round(13 * scaleY);
+                    const lineH     = Math.round(22 * scaleY);
+                    const padX      = Math.round(15 * scaleX);
+                    const padY      = Math.round(12 * scaleY);
+                    const starGap   = Math.round(2  * scaleX);
 
-                    // 텍스트 그리기
-                    ctx.fillStyle = 'white';
-                    ctx.font = `${Math.round(14 * scaleY)}px -apple-system, BlinkMacSystemFont, sans-serif`;
+                    ctx.font = `500 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
 
-                    let yOffset = scaledY + 25 * scaleY;
-                    Object.entries(ratings).forEach(([category, rating]) => {
-                        const fullStars = Math.floor(rating);
-                        const hasHalfStar = rating % 1 !== 0;
-                        const emptyStars = 5 - Math.ceil(rating);
-
-                        let starText = '★'.repeat(fullStars);
-                        if (hasHalfStar) starText += '☆';
-                        starText += '☆'.repeat(emptyStars);
-
-                        ctx.fillText(`${category}: ${starText}`,
-                                   scaledX + 15 * scaleX, yOffset);
-                        yOffset += 22 * scaleY;
+                    // 카테고리 이름 최대 너비 측정
+                    const entries = Object.entries(ratings);
+                    let maxNameW = 0;
+                    entries.forEach(([cat]) => {
+                        const w = ctx.measureText(cat).width;
+                        if (w > maxNameW) maxNameW = w;
                     });
 
-                    // 다운로드
+                    // 별 하나의 너비 = fontSize (모노 근사)
+                    const starW    = fontSize;
+                    const starsW   = starW * 5 + starGap * 4;
+                    const gapNameStar = Math.round(12 * scaleX);
+                    const boxW     = padX * 2 + maxNameW + gapNameStar + starsW;
+                    const boxH     = padY * 2 + entries.length * lineH - Math.round(4 * scaleY);
+
+                    // 배경 (둥근 사각형)
+                    const r = Math.round(8 * Math.min(scaleX, scaleY));
+                    ctx.fillStyle = `rgba(0,0,0,${overlayOpacity})`;
+                    ctx.beginPath();
+                    ctx.moveTo(scaledX + r, scaledY);
+                    ctx.arcTo(scaledX + boxW, scaledY,          scaledX + boxW, scaledY + boxH, r);
+                    ctx.arcTo(scaledX + boxW, scaledY + boxH,   scaledX,        scaledY + boxH, r);
+                    ctx.arcTo(scaledX,        scaledY + boxH,   scaledX,        scaledY,        r);
+                    ctx.arcTo(scaledX,        scaledY,          scaledX + boxW, scaledY,        r);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // 각 행: 카테고리명 + 별
+                    entries.forEach(([category, rating], idx) => {
+                        const rowY = scaledY + padY + fontSize + idx * lineH;
+
+                        // 카테고리명 (흰색)
+                        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                        ctx.font = `500 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+                        ctx.fillText(category, scaledX + padX, rowY);
+
+                        // 별 그리기
+                        const fullStars  = Math.floor(rating);
+                        const hasHalf    = (rating % 1) !== 0;
+                        const emptyStars = 5 - Math.ceil(rating);
+                        let sx = scaledX + padX + maxNameW + gapNameStar;
+
+                        // 꽉 찬 별 — 노란색
+                        ctx.fillStyle = '#ffd700';
+                        for (let i = 0; i < fullStars; i++) {
+                            ctx.fillText('★', sx, rowY);
+                            sx += starW + starGap;
+                        }
+                        // 반 별 — 노란색
+                        if (hasHalf) {
+                            ctx.fillStyle = '#ffd700';
+                            ctx.fillText('★', sx, rowY);
+                            sx += starW + starGap;
+                        }
+                        // 빈 별 — 반투명 흰색
+                        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                        for (let i = 0; i < emptyStars; i++) {
+                            ctx.fillText('★', sx, rowY);
+                            sx += starW + starGap;
+                        }
+                    });
+
                     const link = document.createElement('a');
                     link.download = '영화포스터_평점.png';
                     link.href = canvas.toDataURL();
