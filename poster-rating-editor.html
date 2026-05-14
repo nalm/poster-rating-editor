@@ -195,6 +195,7 @@
             const [overlayStyle, setOverlayStyle] = useState('dark');
             const [overlayOpacity, setOverlayOpacity] = useState(0.85);
             const canvasRef = useRef(null);
+            const displayedImgRef = useRef(null);
 
             const handleFileUpload = (file) => {
                 const reader = new FileReader();
@@ -264,46 +265,55 @@
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 const img = new Image();
-                
+
                 img.onload = () => {
                     canvas.width = img.width;
                     canvas.height = img.height;
-                    
+
                     // 포스터 이미지 그리기
                     ctx.drawImage(img, 0, 0);
-                    
+
+                    // 미리보기 이미지의 실제 표시 크기와 원본 크기 비율 계산
+                    const displayedImg = displayedImgRef.current;
+                    const scaleX = img.width / displayedImg.offsetWidth;
+                    const scaleY = img.height / displayedImg.offsetHeight;
+
+                    // 스케일 적용한 오버레이 위치/크기
+                    const scaledX = overlayPosition.x * scaleX;
+                    const scaledY = overlayPosition.y * scaleY;
+                    const overlayWidth = 280 * scaleX;
+                    const overlayHeight = 140 * scaleY;
+
                     // 오버레이 배경 그리기
-                    const overlayWidth = 280;
-                    const overlayHeight = 140;
                     ctx.fillStyle = `rgba(0, 0, 0, ${overlayOpacity})`;
-                    ctx.fillRect(overlayPosition.x, overlayPosition.y, overlayWidth, overlayHeight);
-                    
+                    ctx.fillRect(scaledX, scaledY, overlayWidth, overlayHeight);
+
                     // 텍스트 그리기
                     ctx.fillStyle = 'white';
-                    ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
-                    
-                    let yOffset = overlayPosition.y + 25;
+                    ctx.font = `${Math.round(14 * scaleY)}px -apple-system, BlinkMacSystemFont, sans-serif`;
+
+                    let yOffset = scaledY + 25 * scaleY;
                     Object.entries(ratings).forEach(([category, rating]) => {
                         const fullStars = Math.floor(rating);
                         const hasHalfStar = rating % 1 !== 0;
                         const emptyStars = 5 - Math.ceil(rating);
-                        
+
                         let starText = '★'.repeat(fullStars);
-                        if (hasHalfStar) starText += '☆'; // 반별은 속이 빈 별로 표시
+                        if (hasHalfStar) starText += '☆';
                         starText += '☆'.repeat(emptyStars);
-                        
-                        ctx.fillText(`${category}: ${starText}`, 
-                                   overlayPosition.x + 15, yOffset);
-                        yOffset += 22;
+
+                        ctx.fillText(`${category}: ${starText}`,
+                                   scaledX + 15 * scaleX, yOffset);
+                        yOffset += 22 * scaleY;
                     });
-                    
+
                     // 다운로드
                     const link = document.createElement('a');
                     link.download = '영화포스터_평점.png';
                     link.href = canvas.toDataURL();
                     link.click();
                 };
-                
+
                 img.src = posterImage;
             };
 
@@ -425,6 +435,7 @@
                         <div className="canvas-container">
                             <div style={{ position: 'relative', maxWidth: '100%' }}>
                                 <img
+                                    ref={displayedImgRef}
                                     src={posterImage}
                                     alt="영화 포스터"
                                     className="poster-canvas"
