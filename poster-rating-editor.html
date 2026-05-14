@@ -196,6 +196,19 @@
             const [overlayOpacity, setOverlayOpacity] = useState(0.85);
             const canvasRef = useRef(null);
             const displayedImgRef = useRef(null);
+            const overlayRef = useRef(null);
+
+            const clampPosition = (x, y) => {
+                const imgEl = displayedImgRef.current;
+                const overlayEl = overlayRef.current;
+                if (!imgEl || !overlayEl) return { x, y };
+                const maxX = imgEl.offsetWidth  - overlayEl.offsetWidth;
+                const maxY = imgEl.offsetHeight - overlayEl.offsetHeight;
+                return {
+                    x: Math.max(0, Math.min(maxX, x)),
+                    y: Math.max(0, Math.min(maxY, y))
+                };
+            };
 
             const handleFileUpload = (file) => {
                 const reader = new FileReader();
@@ -432,7 +445,7 @@
                                             min="10"
                                             max="400"
                                             value={overlayPosition.x}
-                                            onChange={(e) => setOverlayPosition(prev => ({ ...prev, x: parseInt(e.target.value) }))}
+                                            onChange={(e) => setOverlayPosition(prev => clampPosition(parseInt(e.target.value), prev.y))}
                                         />
                                     </div>
                                     <div>
@@ -442,7 +455,7 @@
                                             min="10"
                                             max="500"
                                             value={overlayPosition.y}
-                                            onChange={(e) => setOverlayPosition(prev => ({ ...prev, y: parseInt(e.target.value) }))}
+                                            onChange={(e) => setOverlayPosition(prev => clampPosition(prev.x, parseInt(e.target.value)))}
                                         />
                                     </div>
                                 </div>
@@ -483,6 +496,7 @@
                                     style={{ maxHeight: '600px', width: 'auto' }}
                                 />
                                 <div
+                                    ref={overlayRef}
                                     className="rating-overlay"
                                     style={{
                                         left: `${overlayPosition.x}px`,
@@ -495,10 +509,9 @@
                                         const startY = e.clientY - overlayPosition.y;
                                         
                                         const handleMouseMove = (e) => {
-                                            setOverlayPosition({
-                                                x: Math.max(0, e.clientX - startX),
-                                                y: Math.max(0, e.clientY - startY)
-                                            });
+                                            setOverlayPosition(
+                                                clampPosition(e.clientX - startX, e.clientY - startY)
+                                            );
                                         };
                                         
                                         const handleMouseUp = () => {
